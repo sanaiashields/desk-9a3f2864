@@ -763,15 +763,11 @@
 
   // ---------- Sample data ----------
   const classes = {
-    0: [ { time:"9:00", name:"Calc II", room:"Wren 210", c:"forest" },
-         { time:"1:00", name:"American Lit", room:"Marsh 4", c:"amber" } ],
-    1: [ { time:"11:00", name:"Biology 201 Lab", room:"Sci Bldg 3", c:"red" } ],
-    2: [ { time:"9:00", name:"Calc II", room:"Wren 210", c:"forest" },
-         { time:"1:00", name:"American Lit", room:"Marsh 4", c:"amber" },
-         { time:"4:00", name:"Studio Art", room:"Fine Arts 1", c:"steel" } ],
-    3: [ { time:"11:00", name:"Biology 201", room:"Sci Bldg 3", c:"red" } ],
-    4: [ { time:"9:00", name:"Calc II", room:"Wren 210", c:"forest" },
-         { time:"2:00", name:"Studio Art crit", room:"Fine Arts 1", c:"steel" } ],
+    0: [],
+    1: [],
+    2: [],
+    3: [],
+    4: [],
     5: [],
     6: []
   };
@@ -829,15 +825,19 @@
   // but the app only works with a real Client ID configured for your Pages URL.
   const GOOGLE_CLIENT_ID = "939153475706-u58oj2mci8nps9svnp1f9o25qlk9rl6l.apps.googleusercontent.com";
   const CAL_COLORS = ["forest", "steel", "amber", "red"];
+
+  // Calendars to pull events from. "primary" is your main Google Calendar.
+  // Add any subscribed/secondary calendars here by their Calendar ID
+  // (found under that calendar's Settings and sharing → Integrate calendar).
   const CALENDAR_IDS = [
-  "primary",
-  "c_94f652298f2e8df773c2926c6fbf7d604d3b7eae13201396e16682a9a173cb2b@group.calendar.google.com",
-  "c_44d617c10f48c4dff0ec116c9356c30d41f60bb1bf5d05262ace9e61f9572d92@group.calendar.google.com",
-  "c_9fecfefc54f78a1f5b04b00cd6754facd2b676c15af192960f16556e3920cb81@group.calendar.google.com",
-  "c_23df7acc4e5f0e3f85d1d3bf7fd8550f8dcde2eeae6a78a5b00052433aa7c472@group.calendar.google.com",
-  "c_da9a6fb5243cad627d8b19bc5be29f0badd2445003c3622e5757c6a384f49111@group.calendar.google.com",
-  "edtiuqbei3h6m5mjsqv9t70nq5cvfed7@import.calendar.google.com"
-];
+    "primary",
+    "c_94f652298f2e8df773c2926c6fbf7d604d3b7eae13201396e16682a9a173cb2b@group.calendar.google.com",
+    "c_44d617c10f48c4dff0ec116c9356c30d41f60bb1bf5d05262ace9e61f9572d92@group.calendar.google.com",
+    "c_9fecfefc54f78a1f5b04b00cd6754facd2b676c15af192960f16556e3920cb81@group.calendar.google.com",
+    "c_23df7acc4e5f0e3f85d1d3bf7fd8550f8dcde2eeae6a78a5b00052433aa7c472@group.calendar.google.com",
+    "c_da9a6fb5243cad627d8b19bc5be29f0badd2445003c3622e5757c6a384f49111@group.calendar.google.com",
+    "edtiuqbei3h6m5mjsqv9t70nq5cvfed7@import.calendar.google.com"
+  ];
 
   const calConnectBtn = document.getElementById('calConnectBtn');
   const calStatus = document.getElementById('calStatus');
@@ -879,14 +879,22 @@
     endOfWeek.setHours(23, 59, 59, 999);
     const timeMax = endOfWeek.toISOString();
 
-    const url = "https://www.googleapis.com/calendar/v3/calendars/primary/events" +
-      "?timeMin=" + encodeURIComponent(timeMin) +
-      "&timeMax=" + encodeURIComponent(timeMax) +
-      "&singleEvents=true&orderBy=startTime&maxResults=100";
+    function urlFor(calendarId) {
+      return "https://www.googleapis.com/calendar/v3/calendars/" +
+        encodeURIComponent(calendarId) + "/events" +
+        "?timeMin=" + encodeURIComponent(timeMin) +
+        "&timeMax=" + encodeURIComponent(timeMax) +
+        "&singleEvents=true&orderBy=startTime&maxResults=100";
+    }
 
     try {
-      const res = await fetch(url, { headers: { Authorization: "Bearer " + calAccessToken } });
-      if (res.status === 401) {
+      const responses = await Promise.all(
+        CALENDAR_IDS.map(id =>
+          fetch(urlFor(id), { headers: { Authorization: "Bearer " + calAccessToken } })
+        )
+      );
+
+      if (responses.some(r => r.status === 401)) {
         sessionStorage.removeItem('desk_gcal_token');
         calAccessToken = null;
         calStatus.textContent = "Connection expired — reconnect";
@@ -894,31 +902,42 @@
         calConnectBtn.textContent = "Connect Google Calendar";
         return;
       }
-      const data = await res.json();
+
+      const datasets = await Promise.all(responses.map(r => r.ok ? r.json() : { items: [] }));
       const liveClasses = { 0:[],1:[],2:[],3:[],4:[],5:[],6:[] };
 
-      (data.items || []).forEach(ev => {
-        const start = ev.start && (ev.start.dateTime || ev.start.date);
-        if (!start) return;
-        const startDate = new Date(ev.start.dateTime || ev.start.date + "T00:00:00");
-        const dayIdx = weekDates.findIndex(d =>
-          d.getFullYear() === startDate.getFullYear() &&
-          d.getMonth() === startDate.getMonth() &&
-          d.getDate() === startDate.getDate()
-        );
-        if (dayIdx === -1) return;
+      datasets.forEach(data => {
+        (data.items || []).forEach(ev => {
+          const start = ev.start && (ev.start.dateTime || ev.start.date);
+          if (!start) return;
+          const startDate = new Date(ev.start.dateTime || ev.start.date + "T00:00:00");
+          const dayIdx = weekDates.findIndex(d =>
+            d.getFullYear() === startDate.getFullYear() &&
+            d.getMonth() === startDate.getMonth() &&
+            d.getDate() === startDate.getDate()
+          );
+          if (dayIdx === -1) return;
 
-        const isAllDay = !ev.start.dateTime;
-        const time = isAllDay
-          ? "All day"
-          : startDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-        const name = ev.summary || "(untitled event)";
+          const isAllDay = !ev.start.dateTime;
+          const time = isAllDay
+            ? "All day"
+            : startDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+          const name = ev.summary || "(untitled event)";
 
-        liveClasses[dayIdx].push({
-          time,
-          name,
-          room: ev.location || '',
-          c: colorForCalendarEvent(name)
+          liveClasses[dayIdx].push({
+            time,
+            name,
+            room: ev.location || '',
+            c: colorForCalendarEvent(name)
+          });
+        });
+      });
+
+      Object.keys(liveClasses).forEach(day => {
+        liveClasses[day].sort((a, b) => {
+          if (a.time === "All day") return -1;
+          if (b.time === "All day") return 1;
+          return a.time.localeCompare(b.time);
         });
       });
 
@@ -940,28 +959,21 @@
   });
 
   (function waitForGoogle(retries) {
-  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
-    initGoogleAuth();
-    if (calAccessToken) fetchCalendarWeek();
-  } else if (retries > 0) {
-    setTimeout(() => waitForGoogle(retries - 1), 200);
-  } else {
-    calStatus.textContent = "Google sign-in didn't load — try refreshing";
-    calConnectBtn.disabled = true;
-    calConnectBtn.style.opacity = 0.5;
-  }
-})(25);
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      initGoogleAuth();
+      if (calAccessToken) fetchCalendarWeek();
+    } else if (retries > 0) {
+      setTimeout(() => waitForGoogle(retries - 1), 200);
+    } else {
+      calStatus.textContent = "Google sign-in didn't load — try refreshing";
+      calConnectBtn.disabled = true;
+      calConnectBtn.style.opacity = 0.5;
+    }
+  })(25);
 
 
   // ---------- Assignments ----------
-  const seedAssignments = [
-    { id:1, title:"Problem set 6", course:"Calc II", due:0, done:false },
-    { id:2, title:"Lab report: titration", course:"Biology 201", due:0, done:false },
-    { id:3, title:"Reading response — Ch. 9", course:"American Lit", due:1, done:false },
-    { id:4, title:"Sketchbook, 5 studies", course:"Studio Art", due:3, done:false },
-    { id:5, title:"Problem set 5", course:"Calc II", due:-1, done:true },
-    { id:6, title:"Midterm essay outline", course:"American Lit", due:6, done:false }
-  ];
+  const seedAssignments = [];
 
   let assignments = loadJSON('desk_assignments', seedAssignments);
 
@@ -1057,13 +1069,7 @@
   }
 
   // ---------- Inbox ----------
-  const seedMail = [
-    { id:1, sender:"Prof. Alvarez", subject:"Lab report rubric posted", snippet:"I've posted the rubric for the titration lab report — please check the weighting on the discussion section before Thursday.", time:"8:12 AM", read:false },
-    { id:2, sender:"Dana (study group)", subject:"Re: Calc problem set", snippet:"I think we're overcomplicating #4 — can we meet at the library at 6 to compare answers before it's due?", time:"9:47 AM", read:false },
-    { id:3, sender:"Registrar", subject:"Spring registration opens Monday", snippet:"Course registration for spring term opens next Monday at 8:00 AM. Advising holds must be cleared beforehand.", time:"Yesterday", read:true },
-    { id:4, sender:"Prof. Whitfield", subject:"Office hours moved", snippet:"This week's office hours are moved to Wednesday 2–4 PM due to a department meeting on Tuesday.", time:"Yesterday", read:false },
-    { id:5, sender:"Studio Art — Fine Arts Dept", subject:"Crit sign-up sheet", snippet:"Please add your name to the crit sign-up sheet by Friday so we can plan the room schedule.", time:"Mon", read:true }
-  ];
+  const seedMail = [];
 
   let mail = loadJSON('desk_mail', seedMail);
 
