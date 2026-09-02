@@ -16,6 +16,9 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Google Identity Services, used for the "Connect Google Calendar" button -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --paper: #EFEAE0;
@@ -170,6 +173,32 @@
     font-size: 12px;
     color: var(--ink-soft);
     font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .panel-head-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .cal-status {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+
+  .connect-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    background: var(--steel);
+    color: var(--panel);
+    border: none;
+    padding: 6px 11px;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .connect-btn:hover { opacity: 0.9; }
+  .connect-btn.connected {
+    background: var(--forest);
   }
 
   .week-grid {
@@ -485,9 +514,98 @@
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
   }
+
+  /* ---------- Passphrase gate ---------- */
+
+  #gate {
+    position: fixed;
+    inset: 0;
+    background: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    padding: 20px;
+  }
+
+  #gate.hidden { display: none; }
+
+  .gate-card {
+    width: 100%;
+    max-width: 340px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 0 var(--shadow);
+    padding: 28px 26px 24px;
+    text-align: center;
+  }
+
+  .gate-card h1 {
+    font-size: 22px;
+    margin: 0 0 6px;
+  }
+
+  .gate-card p {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    margin: 0 0 18px;
+  }
+
+  .gate-card input[type="password"] {
+    width: 100%;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-align: center;
+    padding: 10px 12px;
+    border: 1px solid var(--panel-line);
+    border-radius: 2px;
+    background: var(--paper);
+    color: var(--ink);
+    margin-bottom: 12px;
+  }
+  .gate-card input[type="password"]:focus {
+    outline: 2px solid var(--steel);
+    outline-offset: 1px;
+  }
+
+  .gate-card button {
+    width: 100%;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    padding: 10px;
+    background: var(--forest);
+    color: var(--panel);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .gate-card button:hover { background: var(--forest-dark); }
+
+  .gate-error {
+    font-size: 12.5px;
+    color: var(--red);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+
+  #appRoot.hidden { display: none; }
 </style>
 </head>
 <body>
+
+<div id="gate">
+  <div class="gate-card">
+    <h1>The Desk</h1>
+    <p>Enter your passphrase to open your dashboard.</p>
+    <input type="password" id="gateInput" placeholder="Passphrase" autocomplete="off">
+    <button id="gateSubmit">Unlock</button>
+    <div class="gate-error" id="gateError"></div>
+  </div>
+</div>
+
+<div id="appRoot" class="hidden">
 <div class="wrap">
 
   <header class="top">
@@ -519,7 +637,10 @@
   <section class="week-panel">
     <div class="panel-head">
       <h2>This week</h2>
-      <span class="sub">Mon – Sun</span>
+      <div class="panel-head-right">
+        <span class="cal-status mono" id="calStatus">Showing sample schedule</span>
+        <button class="connect-btn mono" id="calConnectBtn">Connect Google Calendar</button>
+      </div>
     </div>
     <div class="week-grid" id="weekGrid"></div>
   </section>
@@ -568,8 +689,60 @@
   </section>
 
 </div>
+</div>
 
 <script>
+  // ---------- Passphrase gate ----------
+  // This is a casual "keep strangers out" screen, not real security —
+  // anyone who views this file's source can find a way around it.
+  // We store a SHA-256 hash of the passphrase (not the passphrase itself)
+  // so it's at least not sitting here in plain text.
+  //
+  // To set your own passphrase: open the browser console on this page and run
+  //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('yourphrase'))
+  //     .then(b => console.log(Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('')))
+  // then paste the result below as GATE_HASH.
+  const GATE_HASH = "49be417ad74080a0031b636b44cfc26fdd0065492d6cd3b033960c4414955cf7"; // default: "desk"
+
+  async function sha256(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  const gate = document.getElementById('gate');
+  const appRoot = document.getElementById('appRoot');
+  const gateInput = document.getElementById('gateInput');
+  const gateSubmit = document.getElementById('gateSubmit');
+  const gateError = document.getElementById('gateError');
+
+  function unlockApp() {
+    gate.classList.add('hidden');
+    appRoot.classList.remove('hidden');
+    sessionStorage.setItem('desk_unlocked', '1');
+  }
+
+  async function tryUnlock() {
+    const val = gateInput.value;
+    const hash = await sha256(val);
+    if (hash === GATE_HASH) {
+      unlockApp();
+    } else {
+      gateError.textContent = "That's not it — try again.";
+      gateInput.value = '';
+      gateInput.focus();
+    }
+  }
+
+  gateSubmit.addEventListener('click', tryUnlock);
+  gateInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+
+  // Stay unlocked for the rest of this browser tab session
+  if (sessionStorage.getItem('desk_unlocked') === '1') {
+    unlockApp();
+  } else {
+    gateInput.focus();
+  }
+
   // ---------- Setup ----------
   const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const now = new Date();
@@ -604,45 +777,162 @@
   };
 
   const weekGrid = document.getElementById('weekGrid');
-  let nextClassText = "—";
-  let nextClassMinDiff = Infinity;
 
-  weekDates.forEach((date, i) => {
-    const col = document.createElement('div');
-    col.className = 'day-col' + (i === todayIndex ? ' is-today' : '');
-    const list = classes[i] || [];
+  function renderWeek(classesData) {
+    weekGrid.innerHTML = '';
+    let nextClassText = "—";
+    let nextClassMinDiff = Infinity;
 
-    let html = `<span class="day-name mono">${DAY_NAMES[i]}</span>
-                <span class="day-num">${date.getDate()}</span>`;
+    weekDates.forEach((date, i) => {
+      const col = document.createElement('div');
+      col.className = 'day-col' + (i === todayIndex ? ' is-today' : '');
+      const list = classesData[i] || [];
 
-    if (list.length === 0) {
-      html += `<div class="day-empty">No classes</div>`;
-    } else {
-      list.forEach(ev => {
-        html += `<div class="class-block c-${ev.c}">
-                   <span class="time">${ev.time}</span>${ev.name}<br>
-                   <span class="time">${ev.room}</span>
-                 </div>`;
-        if (i === todayIndex) {
-          const [h,m] = ev.time.split(':').map(Number);
-          const evDate = new Date(now);
-          evDate.setHours(h, m, 0, 0);
-          const diff = (evDate - now) / 60000; // minutes
-          if (diff > 0 && diff < nextClassMinDiff) {
-            nextClassMinDiff = diff;
-            nextClassText = ev.name + " · " + Math.round(diff) + "m";
+      let html = `<span class="day-name mono">${DAY_NAMES[i]}</span>
+                  <span class="day-num">${date.getDate()}</span>`;
+
+      if (list.length === 0) {
+        html += `<div class="day-empty">No classes</div>`;
+      } else {
+        list.forEach(ev => {
+          html += `<div class="class-block c-${ev.c}">
+                     <span class="time">${ev.time}</span>${escapeHTML(ev.name)}<br>
+                     <span class="time">${escapeHTML(ev.room || '')}</span>
+                   </div>`;
+          if (i === todayIndex && ev.time !== "All day") {
+            const [h,m] = ev.time.split(':').map(Number);
+            const evDate = new Date(now);
+            evDate.setHours(h, m, 0, 0);
+            const diff = (evDate - now) / 60000; // minutes
+            if (diff > 0 && diff < nextClassMinDiff) {
+              nextClassMinDiff = diff;
+              nextClassText = ev.name + " · " + Math.round(diff) + "m";
+            }
           }
-        }
-      });
+        });
+      }
+      col.innerHTML = html;
+      weekGrid.appendChild(col);
+    });
+
+    document.getElementById('statNextClass').textContent = nextClassText === "—" ? "—" : nextClassText.split(' · ')[0];
+    if (nextClassText !== "—") {
+      document.getElementById('statNextClass').title = nextClassText;
     }
-    col.innerHTML = html;
-    weekGrid.appendChild(col);
+  }
+
+  renderWeek(classes);
+
+  // ---------- Google Calendar connection ----------
+  // Fill in your own OAuth Client ID from Google Cloud Console below.
+  // This value is not secret — it's meant to be public in client-side apps —
+  // but the app only works with a real Client ID configured for your Pages URL.
+  const GOOGLE_CLIENT_ID = "939153475706-u58oj2mci8nps9svnp1f9o25qlk9rl6l.apps.googleusercontent.com";
+  const CAL_COLORS = ["forest", "steel", "amber", "red"];
+
+  const calConnectBtn = document.getElementById('calConnectBtn');
+  const calStatus = document.getElementById('calStatus');
+  let tokenClient = null;
+  let calAccessToken = sessionStorage.getItem('desk_gcal_token') || null;
+
+  function colorForCalendarEvent(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % CAL_COLORS.length;
+    return CAL_COLORS[h];
+  }
+
+  function initGoogleAuth() {
+    if (!window.google || GOOGLE_CLIENT_ID.startsWith("YOUR_CLIENT_ID")) {
+      calStatus.textContent = "Calendar connection not configured";
+      calConnectBtn.disabled = true;
+      calConnectBtn.style.opacity = 0.5;
+      return;
+    }
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: "https://www.googleapis.com/auth/calendar.readonly",
+      callback: (resp) => {
+        if (resp.error) {
+          calStatus.textContent = "Couldn't connect — try again";
+          return;
+        }
+        calAccessToken = resp.access_token;
+        sessionStorage.setItem('desk_gcal_token', calAccessToken);
+        fetchCalendarWeek();
+      }
+    });
+  }
+
+  async function fetchCalendarWeek() {
+    calStatus.textContent = "Loading your calendar…";
+    const timeMin = weekDates[0].toISOString();
+    const endOfWeek = new Date(weekDates[6]);
+    endOfWeek.setHours(23, 59, 59, 999);
+    const timeMax = endOfWeek.toISOString();
+
+    const url = "https://www.googleapis.com/calendar/v3/calendars/primary/events" +
+      "?timeMin=" + encodeURIComponent(timeMin) +
+      "&timeMax=" + encodeURIComponent(timeMax) +
+      "&singleEvents=true&orderBy=startTime&maxResults=100";
+
+    try {
+      const res = await fetch(url, { headers: { Authorization: "Bearer " + calAccessToken } });
+      if (res.status === 401) {
+        sessionStorage.removeItem('desk_gcal_token');
+        calAccessToken = null;
+        calStatus.textContent = "Connection expired — reconnect";
+        calConnectBtn.classList.remove('connected');
+        calConnectBtn.textContent = "Connect Google Calendar";
+        return;
+      }
+      const data = await res.json();
+      const liveClasses = { 0:[],1:[],2:[],3:[],4:[],5:[],6:[] };
+
+      (data.items || []).forEach(ev => {
+        const start = ev.start && (ev.start.dateTime || ev.start.date);
+        if (!start) return;
+        const startDate = new Date(ev.start.dateTime || ev.start.date + "T00:00:00");
+        const dayIdx = weekDates.findIndex(d =>
+          d.getFullYear() === startDate.getFullYear() &&
+          d.getMonth() === startDate.getMonth() &&
+          d.getDate() === startDate.getDate()
+        );
+        if (dayIdx === -1) return;
+
+        const isAllDay = !ev.start.dateTime;
+        const time = isAllDay
+          ? "All day"
+          : startDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        const name = ev.summary || "(untitled event)";
+
+        liveClasses[dayIdx].push({
+          time,
+          name,
+          room: ev.location || '',
+          c: colorForCalendarEvent(name)
+        });
+      });
+
+      renderWeek(liveClasses);
+      calStatus.textContent = "Synced with Google Calendar";
+      calConnectBtn.classList.add('connected');
+      calConnectBtn.textContent = "Connected";
+    } catch (err) {
+      calStatus.textContent = "Couldn't load calendar events";
+    }
+  }
+
+  calConnectBtn.addEventListener('click', () => {
+    if (calAccessToken) {
+      fetchCalendarWeek();
+      return;
+    }
+    if (tokenClient) tokenClient.requestAccessToken();
   });
 
-  document.getElementById('statNextClass').textContent = nextClassText === "—" ? "—" : nextClassText.split(' · ')[0];
-  if (nextClassText !== "—") {
-    document.getElementById('statNextClass').title = nextClassText;
-  }
+  initGoogleAuth();
+  if (calAccessToken) fetchCalendarWeek();
+
 
   // ---------- Assignments ----------
   const seedAssignments = [
