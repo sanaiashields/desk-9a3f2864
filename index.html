@@ -930,8 +930,18 @@
     if (tokenClient) tokenClient.requestAccessToken();
   });
 
-  initGoogleAuth();
-  if (calAccessToken) fetchCalendarWeek();
+  (function waitForGoogle(retries) {
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+    initGoogleAuth();
+    if (calAccessToken) fetchCalendarWeek();
+  } else if (retries > 0) {
+    setTimeout(() => waitForGoogle(retries - 1), 200);
+  } else {
+    calStatus.textContent = "Google sign-in didn't load — try refreshing";
+    calConnectBtn.disabled = true;
+    calConnectBtn.style.opacity = 0.5;
+  }
+})(25);
 
 
   // ---------- Assignments ----------
