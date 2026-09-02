@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Desk — Your Week at a Glance</title>
+
+<!-- PWA setup -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2F4A3C">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="The Desk">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #EFEAE0;
+    --paper-deep: #E7E1D3;
+    --panel: #F8F4EA;
+    --panel-line: #DED3B8;
+    --ink: #2A2721;
+    --ink-soft: #6B6355;
+    --forest: #2F4A3C;
+    --forest-dark: #1E332A;
+    --forest-tint: #E1E6DD;
+    --red: #AF3E2C;
+    --red-tint: #F3E0DB;
+    --amber: #B9812C;
+    --amber-tint: #F2E5CB;
+    --steel: #3E5C74;
+    --steel-tint: #DFE7EC;
+    --shadow: rgba(42, 39, 33, 0.14);
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Lora', Georgia, serif;
+  }
+
+  body {
+    background-image:
+      linear-gradient(var(--paper-deep) 1px, transparent 1px);
+    background-size: 100% 28px;
+    background-attachment: local;
+    min-height: 100vh;
+  }
+
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  a { color: inherit; }
+
+  ::selection { background: var(--amber-tint); }
+
+  .wrap {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 30px 28px 70px;
+  }
+
+  /* ---------- Header ---------- */
+
+  header.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    padding-bottom: 18px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .brand .today {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+  }
+
+  .stats {
+    display: flex;
+    gap: 22px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    text-align: right;
+  }
+
+  .stat .num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1;
+    display: block;
+  }
+
+  .stat .label {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    display: block;
+    margin-top: 4px;
+  }
+
+  .stat.warn .num { color: var(--red); }
+  .stat.due .num { color: var(--amber); }
+
+  .install-btn {
+    font-size: 11.5px;
+    background: var(--forest);
+    color: var(--panel);
+    border: none;
+    padding: 5px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .install-btn:hover { background: var(--forest-dark); }
+
+  /* ---------- Week strip ---------- */
+
+  .week-panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 0 var(--shadow);
+    margin-bottom: 22px;
+    overflow: hidden;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px 12px;
+    border-bottom: 1px solid var(--panel-line);
+  }
+
+  .panel-head h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .panel-head .sub {
+    font-size: 12px;
+    color: var(--ink-soft);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+  }
+
+  .day-col {
+    padding: 12px 10px 16px;
+    border-left: 1px solid var(--panel-line);
+    min-height: 150px;
+  }
+
+  .day-col:first-child { border-left: none; }
+
+  .day-col.is-today {
+    background: var(--forest-tint);
+  }
+
+  .day-col .day-name {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    color: var(--ink-soft);
+    margin-bottom: 2px;
+  }
+
+  .day-col .day-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .class-block {
+    background: var(--paper);
+    border-left: 3px solid var(--steel);
+    border-radius: 2px;
+    padding: 6px 7px;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  .class-block .time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    display: block;
+  }
+
+  .class-block.c-red { border-left-color: var(--red); }
+  .class-block.c-amber { border-left-color: var(--amber); }
+  .class-block.c-forest { border-left-color: var(--forest); }
+
+  .day-empty {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    opacity: 0.6;
+  }
+
+  /* ---------- Three column layout ---------- */
+
+  .columns {
+    display: grid;
+    grid-template-columns: 1.1fr 1.1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 0 var(--shadow);
+    overflow: hidden;
+  }
+
+  .panel-body { padding: 14px 16px 16px; }
+
+  /* Assignments */
+
+  .assign-group-label {
+    font-size: 11.5px;
+    text-transform: none;
+    color: var(--ink-soft);
+    margin: 14px 0 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.02em;
+  }
+  .assign-group-label:first-child { margin-top: 0; }
+
+  .assign-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .assign-item:last-child { border-bottom: none; }
+
+  .assign-item input[type="checkbox"] {
+    margin-top: 3px;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--forest);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .assign-text { flex: 1; }
+
+  .assign-title {
+    font-size: 14px;
+    line-height: 1.3;
+  }
+
+  .assign-item.done .assign-title {
+    text-decoration: line-through;
+    color: var(--ink-soft);
+  }
+
+  .assign-meta {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .tag {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .tag.urgent { background: var(--red-tint); color: var(--red); }
+  .tag.soon { background: var(--amber-tint); color: var(--amber); }
+
+  .add-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--panel-line);
+  }
+
+  .add-row input[type="text"] {
+    flex: 1;
+    font-family: 'Lora', serif;
+    font-size: 13px;
+    padding: 7px 9px;
+    border: 1px solid var(--panel-line);
+    border-radius: 2px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .add-row input[type="text"]:focus,
+  textarea:focus { outline: 2px solid var(--steel); outline-offset: 1px; }
+
+  .add-row button {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 7px 12px;
+    background: var(--forest);
+    color: var(--panel);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .add-row button:hover { background: var(--forest-dark); }
+
+  /* Inbox */
+
+  .mail-item {
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--panel-line);
+    cursor: pointer;
+  }
+  .mail-item:last-child { border-bottom: none; }
+
+  .mail-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .mail-sender {
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .mail-item.read .mail-sender { font-weight: 500; color: var(--ink-soft); }
+
+  .mail-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+  }
+
+  .mail-subject {
+    font-size: 13px;
+    margin-top: 2px;
+  }
+  .mail-item.read .mail-subject { color: var(--ink-soft); }
+
+  .mail-snippet {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .mail-item.open .mail-snippet {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+
+  .unread-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    margin-right: 6px;
+    flex-shrink: 0;
+    position: relative;
+    top: -1px;
+  }
+
+  /* Notepad */
+
+  .notepad {
+    background: repeating-linear-gradient(
+      var(--panel),
+      var(--panel) 27px,
+      var(--panel-line) 28px
+    );
+    border-radius: 2px;
+    position: relative;
+    padding: 4px 0;
+  }
+
+  .notepad::before {
+    content: "";
+    position: absolute;
+    left: 34px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--red-tint);
+  }
+
+  .notepad textarea {
+    width: 100%;
+    min-height: 300px;
+    border: none;
+    background: transparent;
+    resize: vertical;
+    font-family: 'Lora', serif;
+    font-size: 14.5px;
+    line-height: 28px;
+    color: var(--ink);
+    padding: 0 16px 0 48px;
+    display: block;
+  }
+
+  .notepad textarea::placeholder { color: var(--ink-soft); font-style: italic; }
+
+  .notepad-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px 4px;
+  }
+
+  .save-note {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+
+  .clear-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    background: none;
+    border: 1px solid var(--panel-line);
+    color: var(--ink-soft);
+    padding: 5px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .clear-btn:hover { border-color: var(--red); color: var(--red); }
+
+  @media (max-width: 980px) {
+    .columns { grid-template-columns: 1fr; }
+    .week-grid { grid-template-columns: repeat(7, minmax(120px,1fr)); overflow-x: auto; }
+  }
+
+  @media (max-width: 640px) {
+    .stats { gap: 14px; }
+    .week-grid { display: flex; overflow-x: auto; }
+    .day-col { min-width: 130px; border-left: 1px solid var(--panel-line); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <h1>The Desk</h1>
+      <span class="today mono" id="todayLabel"></span>
+      <button class="install-btn mono" id="installBtn" hidden>Install app</button>
+    </div>
+    <div class="stats">
+      <div class="stat warn">
+        <span class="num" id="statDueToday">0</span>
+        <span class="label">due today</span>
+      </div>
+      <div class="stat due">
+        <span class="num" id="statDueWeek">0</span>
+        <span class="label">due this week</span>
+      </div>
+      <div class="stat">
+        <span class="num" id="statUnread">0</span>
+        <span class="label">unread mail</span>
+      </div>
+      <div class="stat">
+        <span class="num" id="statNextClass">—</span>
+        <span class="label">next class</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="week-panel">
+    <div class="panel-head">
+      <h2>This week</h2>
+      <span class="sub">Mon – Sun</span>
+    </div>
+    <div class="week-grid" id="weekGrid"></div>
+  </section>
+
+  <section class="columns">
+
+    <!-- Assignments -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Assignments</h2>
+        <span class="sub" id="assignCount"></span>
+      </div>
+      <div class="panel-body">
+        <div id="assignList"></div>
+        <div class="add-row">
+          <input type="text" id="assignInput" placeholder="Add an assignment…">
+          <button id="assignAdd">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inbox -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Inbox</h2>
+        <span class="sub" id="mailCount"></span>
+      </div>
+      <div class="panel-body" id="mailList"></div>
+    </div>
+
+    <!-- Notepad -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Notepad</h2>
+        <span class="sub">to-dos &amp; scraps</span>
+      </div>
+      <div class="notepad">
+        <textarea id="noteArea" placeholder="Write whatever you need to remember…"></textarea>
+      </div>
+      <div class="notepad-foot">
+        <span class="save-note" id="saveIndicator">saved</span>
+        <button class="clear-btn" id="clearNote">Clear</button>
+      </div>
+    </div>
+
+  </section>
+
+</div>
+
+<script>
+  // ---------- Setup ----------
+  const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const now = new Date();
+  const jsDay = now.getDay(); // 0 Sun .. 6 Sat
+  const todayIndex = jsDay === 0 ? 6 : jsDay - 1; // Mon=0..Sun=6
+
+  document.getElementById('todayLabel').textContent =
+    now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // Build the week's actual dates (Mon..Sun) around today
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - todayIndex);
+  const weekDates = Array.from({length:7}, (_,i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+
+  // ---------- Sample data ----------
+  const classes = {
+    0: [ { time:"9:00", name:"Calc II", room:"Wren 210", c:"forest" },
+         { time:"1:00", name:"American Lit", room:"Marsh 4", c:"amber" } ],
+    1: [ { time:"11:00", name:"Biology 201 Lab", room:"Sci Bldg 3", c:"red" } ],
+    2: [ { time:"9:00", name:"Calc II", room:"Wren 210", c:"forest" },
+         { time:"1:00", name:"American Lit", room:"Marsh 4", c:"amber" },
+         { time:"4:00", name:"Studio Art", room:"Fine Arts 1", c:"steel" } ],
+    3: [ { time:"11:00", name:"Biology 201", room:"Sci Bldg 3", c:"red" } ],
+    4: [ { time:"9:00", name:"Calc II", room:"Wren 210", c:"forest" },
+         { time:"2:00", name:"Studio Art crit", room:"Fine Arts 1", c:"steel" } ],
+    5: [],
+    6: []
+  };
+
+  const weekGrid = document.getElementById('weekGrid');
+  let nextClassText = "—";
+  let nextClassMinDiff = Infinity;
+
+  weekDates.forEach((date, i) => {
+    const col = document.createElement('div');
+    col.className = 'day-col' + (i === todayIndex ? ' is-today' : '');
+    const list = classes[i] || [];
+
+    let html = `<span class="day-name mono">${DAY_NAMES[i]}</span>
+                <span class="day-num">${date.getDate()}</span>`;
+
+    if (list.length === 0) {
+      html += `<div class="day-empty">No classes</div>`;
+    } else {
+      list.forEach(ev => {
+        html += `<div class="class-block c-${ev.c}">
+                   <span class="time">${ev.time}</span>${ev.name}<br>
+                   <span class="time">${ev.room}</span>
+                 </div>`;
+        if (i === todayIndex) {
+          const [h,m] = ev.time.split(':').map(Number);
+          const evDate = new Date(now);
+          evDate.setHours(h, m, 0, 0);
+          const diff = (evDate - now) / 60000; // minutes
+          if (diff > 0 && diff < nextClassMinDiff) {
+            nextClassMinDiff = diff;
+            nextClassText = ev.name + " · " + Math.round(diff) + "m";
+          }
+        }
+      });
+    }
+    col.innerHTML = html;
+    weekGrid.appendChild(col);
+  });
+
+  document.getElementById('statNextClass').textContent = nextClassText === "—" ? "—" : nextClassText.split(' · ')[0];
+  if (nextClassText !== "—") {
+    document.getElementById('statNextClass').title = nextClassText;
+  }
+
+  // ---------- Assignments ----------
+  const seedAssignments = [
+    { id:1, title:"Problem set 6", course:"Calc II", due:0, done:false },
+    { id:2, title:"Lab report: titration", course:"Biology 201", due:0, done:false },
+    { id:3, title:"Reading response — Ch. 9", course:"American Lit", due:1, done:false },
+    { id:4, title:"Sketchbook, 5 studies", course:"Studio Art", due:3, done:false },
+    { id:5, title:"Problem set 5", course:"Calc II", due:-1, done:true },
+    { id:6, title:"Midterm essay outline", course:"American Lit", due:6, done:false }
+  ];
+
+  let assignments = loadJSON('desk_assignments', seedAssignments);
+
+  function loadJSON(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch(e) { return fallback; }
+  }
+  function saveJSON(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+  }
+
+  function dueLabel(daysFromToday) {
+    if (daysFromToday < 0) return "overdue";
+    if (daysFromToday === 0) return "today";
+    if (daysFromToday === 1) return "tomorrow";
+    return "in " + daysFromToday + " days";
+  }
+
+  function renderAssignments() {
+    const list = document.getElementById('assignList');
+    list.innerHTML = '';
+
+    const groups = [
+      { label: "Today & overdue", items: assignments.filter(a => a.due <= 0) },
+      { label: "This week", items: assignments.filter(a => a.due > 0 && a.due <= 6) },
+      { label: "Later", items: assignments.filter(a => a.due > 6) }
+    ];
+
+    groups.forEach(g => {
+      if (g.items.length === 0) return;
+      const h = document.createElement('div');
+      h.className = 'assign-group-label';
+      h.textContent = g.label;
+      list.appendChild(h);
+
+      g.items
+        .sort((a,b) => a.due - b.due)
+        .forEach(a => {
+          const row = document.createElement('div');
+          row.className = 'assign-item' + (a.done ? ' done' : '');
+          let tag = '';
+          if (!a.done && a.due <= 0) tag = '<span class="tag urgent">overdue</span>';
+          else if (!a.done && a.due === 0) tag = '<span class="tag urgent">today</span>';
+          else if (!a.done && a.due <= 2) tag = '<span class="tag soon">soon</span>';
+
+          row.innerHTML = `
+            <input type="checkbox" ${a.done ? 'checked' : ''} data-id="${a.id}">
+            <div class="assign-text">
+              <div class="assign-title">${escapeHTML(a.title)}${tag}</div>
+              <div class="assign-meta">${escapeHTML(a.course)} · ${dueLabel(a.due)}</div>
+            </div>`;
+          list.appendChild(row);
+        });
+    });
+
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = Number(cb.dataset.id);
+        assignments = assignments.map(a => a.id === id ? {...a, done: cb.checked} : a);
+        saveJSON('desk_assignments', assignments);
+        renderAssignments();
+        renderStats();
+      });
+    });
+
+    document.getElementById('assignCount').textContent =
+      assignments.filter(a => !a.done).length + " open";
+  }
+
+  document.getElementById('assignAdd').addEventListener('click', addAssignment);
+  document.getElementById('assignInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addAssignment();
+  });
+
+  function addAssignment() {
+    const input = document.getElementById('assignInput');
+    const val = input.value.trim();
+    if (!val) return;
+    const id = assignments.length ? Math.max(...assignments.map(a=>a.id)) + 1 : 1;
+    assignments.push({ id, title: val, course: "General", due: 0, done: false });
+    saveJSON('desk_assignments', assignments);
+    input.value = '';
+    renderAssignments();
+    renderStats();
+  }
+
+  function escapeHTML(s) {
+    return s.replace(/[&<>"']/g, m => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[m]));
+  }
+
+  // ---------- Inbox ----------
+  const seedMail = [
+    { id:1, sender:"Prof. Alvarez", subject:"Lab report rubric posted", snippet:"I've posted the rubric for the titration lab report — please check the weighting on the discussion section before Thursday.", time:"8:12 AM", read:false },
+    { id:2, sender:"Dana (study group)", subject:"Re: Calc problem set", snippet:"I think we're overcomplicating #4 — can we meet at the library at 6 to compare answers before it's due?", time:"9:47 AM", read:false },
+    { id:3, sender:"Registrar", subject:"Spring registration opens Monday", snippet:"Course registration for spring term opens next Monday at 8:00 AM. Advising holds must be cleared beforehand.", time:"Yesterday", read:true },
+    { id:4, sender:"Prof. Whitfield", subject:"Office hours moved", snippet:"This week's office hours are moved to Wednesday 2–4 PM due to a department meeting on Tuesday.", time:"Yesterday", read:false },
+    { id:5, sender:"Studio Art — Fine Arts Dept", subject:"Crit sign-up sheet", snippet:"Please add your name to the crit sign-up sheet by Friday so we can plan the room schedule.", time:"Mon", read:true }
+  ];
+
+  let mail = loadJSON('desk_mail', seedMail);
+
+  function renderMail() {
+    const list = document.getElementById('mailList');
+    list.innerHTML = '';
+    mail.forEach(m => {
+      const item = document.createElement('div');
+      item.className = 'mail-item' + (m.read ? ' read' : '');
+      item.innerHTML = `
+        <div class="mail-top">
+          <span class="mail-sender">${m.read ? '' : '<span class="unread-dot"></span>'}${escapeHTML(m.sender)}</span>
+          <span class="mail-time mono">${m.time}</span>
+        </div>
+        <div class="mail-subject">${escapeHTML(m.subject)}</div>
+        <div class="mail-snippet">${escapeHTML(m.snippet)}</div>`;
+      item.addEventListener('click', () => {
+        item.classList.toggle('open');
+        if (!m.read) {
+          mail = mail.map(x => x.id === m.id ? {...x, read:true} : x);
+          saveJSON('desk_mail', mail);
+          renderMail();
+          renderStats();
+        }
+      });
+      list.appendChild(item);
+    });
+    document.getElementById('mailCount').textContent =
+      mail.filter(m=>!m.read).length + " unread";
+  }
+
+  // ---------- Notepad ----------
+  const noteArea = document.getElementById('noteArea');
+  const saveIndicator = document.getElementById('saveIndicator');
+  noteArea.value = localStorage.getItem('desk_notepad') || '';
+
+  let saveTimer;
+  noteArea.addEventListener('input', () => {
+    saveIndicator.textContent = 'writing…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem('desk_notepad', noteArea.value);
+        saveIndicator.textContent = 'saved';
+      } catch(e) {
+        saveIndicator.textContent = 'not saved';
+      }
+    }, 400);
+  });
+
+  document.getElementById('clearNote').addEventListener('click', () => {
+    if (noteArea.value.trim() && !confirm('Clear the notepad?')) return;
+    noteArea.value = '';
+    localStorage.setItem('desk_notepad', '');
+    saveIndicator.textContent = 'saved';
+    noteArea.focus();
+  });
+
+  // ---------- Stats ----------
+  function renderStats() {
+    const dueToday = assignments.filter(a => !a.done && a.due <= 0).length;
+    const dueWeek = assignments.filter(a => !a.done && a.due >= 0 && a.due <= 6).length;
+    const unread = mail.filter(m => !m.read).length;
+    document.getElementById('statDueToday').textContent = dueToday;
+    document.getElementById('statDueWeek').textContent = dueWeek;
+    document.getElementById('statUnread').textContent = unread;
+  }
+
+  renderAssignments();
+  renderMail();
+  renderStats();
+
+  // ---------- PWA: service worker + install prompt ----------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+
+  let deferredInstallPrompt = null;
+  const installBtn = document.getElementById('installBtn');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (installBtn) installBtn.hidden = false;
+  });
+
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      installBtn.hidden = true;
+    });
+  }
+
+  window.addEventListener('appinstalled', () => {
+    if (installBtn) installBtn.hidden = true;
+  });
+</script>
+</body>
+</html>
